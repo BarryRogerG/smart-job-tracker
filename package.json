@@ -1,0 +1,13 @@
+{
+  "name": "smart-job-tracker",
+  "private": true,
+  "description": "Monorepo root — convenience scripts only. Install deps in client/ and server/ separately.",
+  "scripts": {
+    "test:server": "npm test --prefix server",
+    "test:server:watch": "npm run test:watch --prefix server",
+    "test:e2e": "npm run test:e2e --prefix client",
+    "test:e2e:ui": "npm run test:e2e:ui --prefix client",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
+  }
+}
