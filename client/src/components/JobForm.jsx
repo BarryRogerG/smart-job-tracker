@@ -14,9 +14,9 @@ const emptyForm = {
 const initialErrors = { company: null };
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-3 text-base transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:py-2";
 const inputErrorClass =
-  "w-full rounded-lg border border-red-400 px-3 py-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400";
+  "w-full rounded-lg border border-red-400 px-3 py-3 text-base transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400 sm:py-2";
 
 function buildInitialForm(initialJob) {
   if (!initialJob) return emptyForm;

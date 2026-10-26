@@ -5,7 +5,7 @@ import { login as loginRequest } from "../services/authApi";
 import { useAuth } from "../context/AuthContext.jsx";
 
 const fieldClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-3 text-base transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500";
 
 /** Used for standard stacked fields; keeps name stable for HMR / partial saves */
 const inputClass = `${fieldClass} mb-3`;
@@ -26,39 +26,53 @@ function LoginPage() {
     setFormState((prev) => ({ ...prev, [name]: value }));
   };
 
- const handleSubmit = async (event) => {
-  event.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-  setIsSubmitting(true);
-  setError("");
+    setIsSubmitting(true);
+    setError("");
 
-  try {
-    const { email, password } = formState;
+    try {
+      // Read the live form so iOS/Android autofill is included even when
+      // React state did not get an onChange.
+      const formData = new FormData(event.currentTarget);
+      const email = String(
+        formData.get("email") || formState.email || ""
+      ).trim();
+      const password = String(
+        formData.get("password") || formState.password || ""
+      );
 
-    const response = await loginRequest({
-      email: email?.trim() ?? "",
-      password,
-    });
+      const response = await loginRequest({
+        email,
+        password,
+      });
 
-    login(response.token, response.user);
-    navigate("/");
-  } catch (requestError) {
-    const message =
-      requestError?.response?.data?.message ||
-      requestError?.message ||
-      "Login failed";
+      login(response.token, response.user);
+      navigate("/");
+    } catch (requestError) {
+      const status = requestError?.response?.status;
+      const rawMessage = requestError?.response?.data?.message;
+      const message =
+        requestError?.code === "ECONNABORTED"
+          ? "Login timed out. If you are on the Vercel site, open http://localhost:5173 instead."
+          : !requestError?.response
+            ? "Cannot reach the API. Use http://localhost:5173 for local login, not the deployed site."
+            : status >= 500
+              ? "Server could not complete login. Check that Postgres is running and server/.env DATABASE_URL is correct."
+              : rawMessage || requestError?.message || "Login failed";
 
-    setError(message);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md items-center p-6">
+    <main className="mx-auto flex min-h-dvh w-full max-w-md items-center p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <form
         onSubmit={handleSubmit}
-        className="w-full rounded-xl border border-gray-300 bg-white p-6 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+        className="w-full rounded-xl border border-gray-300 bg-white p-6 shadow-md"
       >
         <h1 className="mb-1 text-xl font-semibold text-text-primary">
           Smart Job Tracker
@@ -72,6 +86,8 @@ function LoginPage() {
           value={formState.email}
           onChange={handleChange}
           required
+          autoComplete="email"
+          inputMode="email"
         />
         <div className="relative mb-3">
           <input
@@ -96,7 +112,7 @@ function LoginPage() {
         </div>
         {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
         <button
-          className="w-full rounded-lg bg-blue-600 px-4 py-2 font-medium text-white shadow-sm transition duration-200 hover:bg-blue-700 hover:shadow active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+          className="min-h-11 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white shadow-sm transition duration-200 hover:bg-blue-700 hover:shadow active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
           type="submit"
           disabled={isSubmitting}
         >

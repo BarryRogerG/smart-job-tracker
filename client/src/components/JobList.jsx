@@ -1,5 +1,5 @@
 import { Pencil, Trash2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion as Motion, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useJobDragHandle } from "../hooks/useJobDragHandle.js";
 import { listStaggerDelayMs } from "../utils/listAnimation.js";
@@ -13,6 +13,7 @@ import {
 
 // Discrete animation states for the comfortable list card. Defined at module
 // scope so Framer doesn't reallocate the target object on every render.
+// `dragging` is a placeholder in the list; DragOverlay owns the lift.
 const cardVariants = {
   idle: {
     scale: 1,
@@ -23,10 +24,12 @@ const cardVariants = {
       "0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06)",
   },
   dragging: {
-    scale: 1.07,
-    rotate: -1.5,
-    opacity: 0.86,
-    boxShadow: "0 18px 42px rgba(15, 23, 42, 0.25)",
+    scale: 1,
+    rotate: 0,
+    opacity: 0.4,
+    y: 0,
+    boxShadow:
+      "0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06)",
   },
   absorbing: {
     scale: 0.82,
@@ -37,6 +40,7 @@ const cardVariants = {
   },
 };
 import CompactJobCard from "./CompactJobCard.jsx";
+import JobsSectionHeader from "./JobsSectionHeader.jsx";
 import { statusClass, statusLabel } from "../utils/jobStatus.js";
 
 function DraggableJobCard({
@@ -50,12 +54,15 @@ function DraggableJobCard({
   onSelect,
   canEditDelete,
 }) {
+  const reducedMotion = useReducedMotion();
   const canEdit = typeof onEdit === "function";
   const canDelete = typeof onDelete === "function";
   const isAbsorbing =
     absorbingJobId != null && String(absorbingJobId) === String(job.id);
-  const { attributes, listeners, setNodeRef, isDragging, transformStyle } =
-    useJobDragHandle(job, { disabled: !canEditDelete });
+  const { attributes, listeners, setNodeRef, isDragging } = useJobDragHandle(
+    job,
+    { disabled: !canEditDelete },
+  );
 
   // True when this specific card is the one being dragged. dnd-kit fires
   // `isDragging` for the active card; `draggingJobId` is the parent's source
@@ -66,39 +73,48 @@ function DraggableJobCard({
   // pointer release doesn't compete with the drag/absorb animation.
   const isInteractionLocked = isAbsorbing || isDragSelfActive;
 
-  const style = {
-    animationDelay: `${listStaggerDelayMs(index, "comfortable")}ms`,
-    transform: transformStyle,
-  };
+  const style = reducedMotion
+    ? undefined
+    : { animationDelay: `${listStaggerDelayMs(index, "comfortable")}ms` };
+
+  const cardTransition = reducedMotion
+    ? { duration: 0 }
+    : isAbsorbing
+      ? CARD_ABSORB_TWEEN
+      : isDragSelfActive
+        ? CARD_DRAG_SPRING
+        : CARD_TWEEN;
 
   const formattedDate = job.appliedDate
     ? new Date(job.appliedDate).toLocaleDateString()
     : "N/A";
 
   return (
-    <motion.article
+    <Motion.article
       ref={setNodeRef}
       data-job-card
       style={style}
       title={job.notes || undefined}
-      className={`animate-fade-in-up rounded-xl border bg-white px-4 py-3 transition-colors duration-200 ${
+      className={`${reducedMotion ? "" : "animate-fade-in-up "}rounded-xl border bg-white px-4 py-3 transition-colors duration-200 ${
         isSelected ? "border-black" : "border-slate-200"
       }`}
       onClick={() => onSelect?.(job.id)}
       variants={cardVariants}
       initial="idle"
       animate={
-        isAbsorbing ? "absorbing" : isDragSelfActive ? "dragging" : "idle"
-      }
-      whileHover={isInteractionLocked ? undefined : CARD_HOVER}
-      whileTap={isInteractionLocked ? undefined : CARD_TAP}
-      transition={
         isAbsorbing
-          ? CARD_ABSORB_TWEEN
-          : isDragSelfActive
-            ? CARD_DRAG_SPRING
-            : CARD_TWEEN
+          ? "absorbing"
+          : reducedMotion
+            ? "idle"
+            : isDragSelfActive
+              ? "dragging"
+              : "idle"
       }
+      whileHover={
+        reducedMotion || isInteractionLocked ? undefined : CARD_HOVER
+      }
+      whileTap={reducedMotion || isInteractionLocked ? undefined : CARD_TAP}
+      transition={cardTransition}
       {...listeners}
       {...attributes}
     >
@@ -113,7 +129,7 @@ function DraggableJobCard({
 
         {/* Right: Status badge + applied date + actions */}
         <div className="flex shrink-0 items-center gap-3">
-          <div className="hidden flex-col items-end gap-1 sm:flex">
+          <div className="flex flex-col items-end gap-1">
             <span
               className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusClass(
                 job.status
@@ -128,7 +144,7 @@ function DraggableJobCard({
 
           {job.link ? (
             <a
-              className="hidden text-xs font-medium text-blue-600 hover:underline sm:inline"
+              className="text-xs font-medium text-blue-600 hover:underline"
               href={job.link}
               target="_blank"
               rel="noreferrer"
@@ -140,7 +156,7 @@ function DraggableJobCard({
 
           <div className="flex items-center gap-1">
             <button
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition duration-200 active:scale-95 disabled:active:scale-100 ${
+              className={`inline-flex h-11 w-11 items-center justify-center rounded-md transition duration-200 active:scale-95 disabled:active:scale-100 ${
                 canEdit
                   ? "text-text-muted hover:bg-slate-100 hover:text-text-primary"
                   : "cursor-not-allowed text-gray-300"
@@ -154,7 +170,7 @@ function DraggableJobCard({
               <Pencil size={15} aria-hidden="true" />
             </button>
             <button
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition duration-200 active:scale-95 disabled:active:scale-100 ${
+              className={`inline-flex h-11 w-11 items-center justify-center rounded-md transition duration-200 active:scale-95 disabled:active:scale-100 ${
                 canDelete
                   ? "text-text-muted hover:bg-red-50 hover:text-red-700"
                   : "cursor-not-allowed text-red-200"
@@ -170,25 +186,24 @@ function DraggableJobCard({
           </div>
         </div>
       </div>
-    </motion.article>
+    </Motion.article>
   );
 }
 
 function JobList({
-  jobs,
+  jobs = [],
   onEdit,
   onDelete,
   draggingJobId,
   absorbingJobId,
   canEditDelete = true,
   density = "comfortable",
+  headerAction,
 }) {
   const isCompact = density === "compact";
   const Card = isCompact ? CompactJobCard : DraggableJobCard;
   const [selectedJobId, setSelectedJobId] = useState(null);
   const listRef = useRef(null);
-  const canEdit = typeof onEdit === "function";
-  const canDelete = typeof onDelete === "function";
   const isEmpty = jobs.length === 0;
 
   useEffect(() => {
@@ -219,15 +234,13 @@ function JobList({
 
   return (
     <section className="space-y-4">
-      <header className="flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-text-primary">Job Applications</h2>
-          <p className="text-sm text-text-hint">
-            Track applications, interviews, and offers in one place.
-          </p>
-        </div>
-        <p className="text-sm text-text-hint">{jobs.length} total</p>
-      </header>
+      <JobsSectionHeader
+        jobsView="list"
+        headerAction={headerAction}
+        trailing={
+          <p className="text-sm text-text-hint">{jobs.length} total</p>
+        }
+      />
 
       <div ref={listRef} className={isCompact ? "space-y-1.5" : "space-y-4"}>
         {jobs.map((job, index) => (

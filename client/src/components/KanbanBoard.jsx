@@ -1,5 +1,5 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion as Motion, useReducedMotion } from "framer-motion";
 import { useDroppable } from "@dnd-kit/core";
 import { useJobDragHandle } from "../hooks/useJobDragHandle.js";
 import {
@@ -11,9 +11,12 @@ import {
 import { STAGES } from "../utils/jobStages.js";
 import { normalizeStatus } from "../utils/jobStats.js";
 import { statusLabel } from "../utils/jobStatus.js";
+import JobsSectionHeader from "./JobsSectionHeader.jsx";
 
 // Discrete animation states for the Kanban card. There's no "absorbing"
 // state because Kanban cards drop onto columns, not into a stat tile.
+// `dragging` is a placeholder: the source stays in the column while
+// DragOverlay carries the lift/tilt that follows the pointer.
 const cardVariants = {
   idle: {
     scale: 1,
@@ -22,14 +25,14 @@ const cardVariants = {
     boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
   },
   dragging: {
-    scale: 1.08,
-    rotate: -1,
-    opacity: 0.86,
-    boxShadow: "0 18px 42px rgba(15, 23, 42, 0.25)",
+    scale: 1,
+    rotate: 0,
+    opacity: 0.4,
+    boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
   },
 };
 
-function buildColumns(jobs) {
+function buildColumns() {
   return STAGES.reduce((acc, stage) => {
     acc[stage.key] = [];
     return acc;
@@ -37,25 +40,37 @@ function buildColumns(jobs) {
 }
 
 function KanbanCard({ job, onEdit, onDelete, canEditDelete, isMovingJobId, draggingJobId }) {
-  const { attributes, listeners, setNodeRef, isDragging, transformStyle } =
-    useJobDragHandle(job, { disabled: !canEditDelete });
+  const reducedMotion = useReducedMotion();
+  const { attributes, listeners, setNodeRef, isDragging } = useJobDragHandle(
+    job,
+    { disabled: !canEditDelete },
+  );
 
   const isDragSelfActive =
     isDragging || String(draggingJobId) === String(job.id);
 
+  const cardTransition = reducedMotion
+    ? { duration: 0 }
+    : isDragSelfActive
+      ? CARD_DRAG_SPRING
+      : CARD_TWEEN;
+
   return (
-    <motion.article
+    <Motion.article
       ref={setNodeRef}
-      style={{ transform: transformStyle }}
       className={`rounded-xl border border-slate-200 bg-white p-3 shadow-card ${
         canEditDelete ? "cursor-grab active:cursor-grabbing" : "cursor-default"
       } ${isMovingJobId === job.id ? "ring-2 ring-blue-200" : ""}`}
       variants={cardVariants}
       initial="idle"
-      animate={isDragSelfActive ? "dragging" : "idle"}
-      whileHover={isDragSelfActive ? undefined : KANBAN_CARD_HOVER}
-      whileTap={isDragSelfActive ? undefined : CARD_TAP}
-      transition={isDragSelfActive ? CARD_DRAG_SPRING : CARD_TWEEN}
+      animate={
+        reducedMotion ? "idle" : isDragSelfActive ? "dragging" : "idle"
+      }
+      whileHover={
+        reducedMotion || isDragSelfActive ? undefined : KANBAN_CARD_HOVER
+      }
+      whileTap={reducedMotion || isDragSelfActive ? undefined : CARD_TAP}
+      transition={cardTransition}
       {...listeners}
       {...attributes}
     >
@@ -105,7 +120,7 @@ function KanbanCard({ job, onEdit, onDelete, canEditDelete, isMovingJobId, dragg
           Delete
         </button>
       </div>
-    </motion.article>
+    </Motion.article>
   );
 }
 
@@ -143,8 +158,9 @@ function KanbanBoard({
   canEditDelete,
   isMovingJobId,
   draggingJobId,
+  headerAction,
 }) {
-  const columns = buildColumns(jobs);
+  const columns = buildColumns();
   jobs.forEach((job) => {
     const key = normalizeStatus(job?.status);
     if (columns[key]) {
@@ -156,14 +172,7 @@ function KanbanBoard({
 
   return (
     <section className="space-y-4">
-      <header className="flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-text-primary">Job Pipeline</h2>
-          <p className="text-sm text-text-hint">
-            Drag cards across stages to move your ATS funnel.
-          </p>
-        </div>
-      </header>
+      <JobsSectionHeader jobsView="kanban" headerAction={headerAction} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {STAGES.map((stage) => (

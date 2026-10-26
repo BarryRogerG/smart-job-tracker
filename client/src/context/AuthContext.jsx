@@ -9,26 +9,44 @@ function normalizeStoredToken(value) {
     .replace(/^["']|["']$/g, "");
 }
 
-export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() =>
-    normalizeStoredToken(localStorage.getItem("token"))
-  );
-  const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem("user");
+function readStoredJson(key) {
+  try {
+    const stored = localStorage.getItem(key);
     return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function AuthProvider({ children }) {
+  const [token, setToken] = useState(() => {
+    try {
+      return normalizeStoredToken(localStorage.getItem("token"));
+    } catch {
+      return null;
+    }
   });
+  const [user, setUser] = useState(() => readStoredJson("user"));
 
   const login = (nextToken, nextUser) => {
     const cleanToken = normalizeStoredToken(nextToken);
-    localStorage.setItem("token", cleanToken);
-    localStorage.setItem("user", JSON.stringify(nextUser));
+    try {
+      localStorage.setItem("token", cleanToken);
+      localStorage.setItem("user", JSON.stringify(nextUser));
+    } catch {
+      // Safari private mode can throw; keep an in-memory session.
+    }
     setToken(cleanToken);
     setUser(nextUser);
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+    } catch {
+      // ignore storage failures
+    }
     setToken(null);
     setUser(null);
   };

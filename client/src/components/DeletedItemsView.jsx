@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useJobs } from "../context/JobContext.jsx";
 
 /**
@@ -6,6 +7,7 @@ import { useJobs } from "../context/JobContext.jsx";
  */
 export default function DeletedItemsView() {
   const { deletedItems, clearDeletedItems, restoreDeletedJob } = useJobs();
+  const [restoringId, setRestoringId] = useState(null);
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card">
@@ -55,10 +57,18 @@ export default function DeletedItemsView() {
               </div>
               <button
                 type="button"
-                onClick={() => restoreDeletedJob(item)}
-                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                disabled={restoringId != null}
+                onClick={async () => {
+                  setRestoringId(item.id);
+                  try {
+                    await restoreDeletedJob(item);
+                  } finally {
+                    setRestoringId(null);
+                  }
+                }}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Restore
+                {restoringId === item.id ? "Restoring..." : "Restore"}
               </button>
             </article>
           ))}

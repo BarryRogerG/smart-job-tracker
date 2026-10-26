@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -70,7 +71,7 @@ export function JobProvider({ children }) {
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     retry: (failureCount, requestError) => {
-      if (requestError?.response?.status === 401) return false;
+      if (requestError?.response?.status === 401) return false; // Don't retry if the user is unauthorized; they need to log in again.
       return failureCount < 1;
     },
   });
@@ -168,14 +169,28 @@ export function JobProvider({ children }) {
 
   const updateJobMutation = useMutation({
     mutationFn: ({ id, body }) => apiUpdateJob(id, body),
+    onMutate: async ({ id, body }) => {
+      await queryClient.cancelQueries({ queryKey: currentJobsQueryKey });
+      const previousJobs = queryClient.getQueryData(currentJobsQueryKey) || [];
+      setCachedJobs((prev) =>
+        prev.map((job) => (job.id === id ? { ...job, ...body } : job))
+      );
+      return { previousJobs };
+    },
     onSuccess: (updated) => {
       setCachedJobs((prev) =>
         prev.map((job) => (job.id === updated.id ? updated : job))
       );
     },
-    onError: (requestError) => {
+    onError: (requestError, _variables, context) => {
+      if (context?.previousJobs) {
+        queryClient.setQueryData(currentJobsQueryKey, context.previousJobs);
+      }
       if (requestError.response?.status === 401) return;
-      setError(requestError.response?.data?.message || "Failed to update job");
+      const message =
+        requestError.response?.data?.message || "Failed to update job";
+      setError(message);
+      setToast({ type: "error", message });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: currentJobsQueryKey });
@@ -184,8 +199,15 @@ export function JobProvider({ children }) {
 
   const deleteJobMutation = useMutation({
     mutationFn: (job) => apiDeleteJob(job.id),
+    onMutate: async (job) => {
+      await queryClient.cancelQueries({ queryKey: currentJobsQueryKey });
+      const previousJobs = queryClient.getQueryData(currentJobsQueryKey) || [];
+      setCachedJobs((prev) =>
+        prev.filter((item) => String(item.id) !== String(job.id))
+      );
+      return { previousJobs, job };
+    },
     onSuccess: (_result, job) => {
-      setCachedJobs((prev) => prev.filter((item) => item.id !== job.id));
       setDeletedItems((prev) => [
         {
           ...job,
@@ -194,9 +216,15 @@ export function JobProvider({ children }) {
         ...prev,
       ]);
     },
-    onError: (requestError) => {
+    onError: (requestError, _job, context) => {
+      if (context?.previousJobs) {
+        queryClient.setQueryData(currentJobsQueryKey, context.previousJobs);
+      }
       if (requestError.response?.status === 401) return;
-      setError(requestError.response?.data?.message || "Failed to delete job");
+      const message =
+        requestError.response?.data?.message || "Failed to delete job";
+      setError(message);
+      setToast({ type: "error", message });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: currentJobsQueryKey });
@@ -223,24 +251,48 @@ export function JobProvider({ children }) {
   const clearError = useCallback(() => setError(""), []);
   const clearToast = useCallback(() => setToast(null), []);
   const clearDeletedItems = useCallback(() => setDeletedItems([]), []);
+  const restoreInFlightRef = useRef(new Set());
 
   const restoreDeletedJob = useCallback(
     async (deletedJob) => {
-      const payload = {
-        company: deletedJob.company,
-        role: deletedJob.role,
-        status: deletedJob.status,
-        appliedDate: deletedJob.appliedDate
-          ? new Date(deletedJob.appliedDate).toISOString()
-          : new Date().toISOString(),
-        notes: deletedJob.notes || "",
-        link: deletedJob.link || undefined,
-      };
+      const deletedId = deletedJob?.id;
+      if (deletedId == null || restoreInFlightRef.current.has(deletedId)) {
+        return;
+      }
+      restoreInFlightRef.current.add(deletedId);
 
-      await createJob(payload);
-      setDeletedItems((prev) => prev.filter((item) => item.id !== deletedJob.id));
+      try {
+        // Trash is localStorage-only. Restore used to POST a new row even when
+        // the original job was still on the server, which created duplicates.
+        const liveJobs = await queryClient.fetchQuery({
+          queryKey: currentJobsQueryKey,
+          queryFn: getJobs,
+        });
+        const stillOnServer = (Array.isArray(liveJobs) ? liveJobs : []).some(
+          (job) => String(job.id) === String(deletedId)
+        );
+
+        if (!stillOnServer) {
+          await createJob({
+            company: deletedJob.company,
+            role: deletedJob.role,
+            status: deletedJob.status,
+            appliedDate: deletedJob.appliedDate
+              ? new Date(deletedJob.appliedDate).toISOString()
+              : new Date().toISOString(),
+            notes: deletedJob.notes || "",
+            link: deletedJob.link || undefined,
+          });
+        }
+
+        setDeletedItems((prev) =>
+          prev.filter((item) => String(item.id) !== String(deletedId))
+        );
+      } finally {
+        restoreInFlightRef.current.delete(deletedId);
+      }
     },
-    [createJob]
+    [createJob, currentJobsQueryKey, queryClient]
   );
 
   const isMock = false;

@@ -30,7 +30,7 @@ export function getJobTotals(jobs = []) {
 // (instead of toISOString) keeps the bucket key aligned with the user's
 // timezone, so a job applied at 11pm Sunday local time still falls in the
 // week the user thinks of as "this week".
-function toLocalISODate(date) {
+export function toLocalISODate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");

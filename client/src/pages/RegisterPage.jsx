@@ -5,7 +5,7 @@ import { register as registerRequest } from "../services/authApi";
 import { useAuth } from "../context/AuthContext.jsx";
 
 const fieldClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-3 text-base transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500";
 
 const inputClass = `${fieldClass} mb-3`;
 
@@ -31,7 +31,17 @@ function RegisterPage() {
     event.preventDefault();
     setError("");
 
-    if (formState.password !== formState.confirmPassword) {
+    const formData = new FormData(event.currentTarget);
+    const email = String(formData.get("email") || formState.email || "").trim();
+    const password = String(
+      formData.get("password") || formState.password || ""
+    );
+    const confirmPassword = String(
+      formData.get("confirmPassword") || formState.confirmPassword || ""
+    );
+    const name = String(formData.get("name") || formState.name || "").trim();
+
+    if (password !== confirmPassword) {
       setError("Passwords do not match");
       return;
     }
@@ -39,15 +49,21 @@ function RegisterPage() {
     setIsSubmitting(true);
     try {
       const response = await registerRequest({
-        email: formState.email.trim(),
-        password: formState.password,
-        name: formState.name.trim() || undefined,
+        email,
+        password,
+        name: name || undefined,
       });
       login(response.token, response.user);
       navigate("/");
     } catch (requestError) {
+      const status = requestError?.response?.status;
+      const rawMessage = requestError?.response?.data?.message;
       setError(
-        requestError.response?.data?.message || "Could not create account"
+        requestError?.code === "ECONNABORTED" || !requestError?.response
+          ? "Cannot reach the API. Use http://localhost:5173 on this PC, not the Vercel site."
+          : status >= 500
+            ? "Server could not create the account. Check that Postgres and the API are running."
+            : rawMessage || "Could not create account"
       );
     } finally {
       setIsSubmitting(false);
@@ -55,10 +71,10 @@ function RegisterPage() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md items-center p-6">
+    <main className="mx-auto flex min-h-dvh w-full max-w-md items-center p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <form
         onSubmit={handleSubmit}
-        className="w-full rounded-xl border border-gray-300 bg-white p-6 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+        className="w-full rounded-xl border border-gray-300 bg-white p-6 shadow-md"
       >
         <h1 className="mb-1 text-xl font-semibold text-text-primary">
           Create account
@@ -125,7 +141,7 @@ function RegisterPage() {
         {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
 
         <button
-          className="w-full rounded-lg bg-blue-600 px-4 py-2 font-medium text-white shadow-sm transition duration-200 hover:bg-blue-700 hover:shadow active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+          className="min-h-11 w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white shadow-sm transition duration-200 hover:bg-blue-700 hover:shadow active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
           type="submit"
           disabled={isSubmitting}
         >

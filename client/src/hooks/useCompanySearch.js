@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { searchCompanies } from "../services/companiesApi.js";
 
 /**
@@ -27,23 +26,27 @@ export function useCompanySearch(query, { delay = 400, minLength = 2 } = {}) {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    const trimmed = String(query || "").trim();
+    const trimmed = (query ?? "").trim();
 
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+    function cancelPending() {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
     }
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
-    }
+
+    cancelPending();
 
     if (trimmed.length < minLength) {
       setResults([]);
       setIsLoading(false);
       setError(null);
       setHasSearched(false);
-      return undefined;
+      return;
     }
 
     setIsLoading(true);
@@ -62,7 +65,7 @@ export function useCompanySearch(query, { delay = 400, minLength = 2 } = {}) {
           setHasSearched(true);
         }
       } catch (err) {
-        if (axios.isCancel(err) || err?.name === "CanceledError") {
+        if (err?.name === "CanceledError") {
           return;
         }
         if (!controller.signal.aborted) {
@@ -82,14 +85,7 @@ export function useCompanySearch(query, { delay = 400, minLength = 2 } = {}) {
     }, delay);
 
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      if (abortRef.current) {
-        abortRef.current.abort();
-        abortRef.current = null;
-      }
+      cancelPending();
     };
   }, [query, delay, minLength]);
 

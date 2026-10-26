@@ -40,7 +40,10 @@ model Job {
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   statusHistory StatusHistory[]
 
-  @@index([userId])
+  // listJobs: WHERE userId ORDER BY appliedDate DESC
+  @@index([userId, appliedDate])
+  // getFunnelMetrics: GROUP BY status WHERE userId
+  @@index([userId, status])
 }
 
 model StatusHistory {
@@ -50,6 +53,7 @@ model StatusHistory {
   changedAt DateTime  @default(now())
   job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
-  @@index([jobId])
+  // Per-job timeline (time-in-status analytics)
+  @@index([jobId, changedAt])
   @@index([status])
 }

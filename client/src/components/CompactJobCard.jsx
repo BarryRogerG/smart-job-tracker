@@ -1,5 +1,5 @@
 import { ExternalLink, Pencil, Trash2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion as Motion, useReducedMotion } from "framer-motion";
 import { useJobDragHandle } from "../hooks/useJobDragHandle.js";
 import { listStaggerDelayMs } from "../utils/listAnimation.js";
 import {
@@ -17,6 +17,7 @@ import {
 
 // Discrete animation states for the dense compact card. Slimmer scales than
 // the comfortable variant since the row is shorter and motion reads bigger.
+// `dragging` is a placeholder in the list; DragOverlay owns the lift.
 const cardVariants = {
   idle: {
     scale: 1,
@@ -25,9 +26,10 @@ const cardVariants = {
     boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
   },
   dragging: {
-    scale: 1.02,
-    opacity: 0.9,
-    boxShadow: "0 10px 22px rgba(15, 23, 42, 0.2)",
+    scale: 1,
+    opacity: 0.4,
+    y: 0,
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
   },
   absorbing: {
     scale: 0.92,
@@ -62,6 +64,7 @@ function CompactJobCard({
   onSelect,
   canEditDelete,
 }) {
+  const reducedMotion = useReducedMotion();
   const canEdit = typeof onEdit === "function";
   const canDelete = typeof onDelete === "function";
   const isAbsorbing =
@@ -69,42 +72,53 @@ function CompactJobCard({
   const isThisDragging =
     draggingJobId != null && String(draggingJobId) === String(job.id);
 
-  const { attributes, listeners, setNodeRef, isDragging, transformStyle } =
-    useJobDragHandle(job, { disabled: !canEditDelete });
+  const { attributes, listeners, setNodeRef, isDragging } = useJobDragHandle(
+    job,
+    { disabled: !canEditDelete },
+  );
 
   const isDragSelfActive = isDragging || isThisDragging;
   const isInteractionLocked = isAbsorbing || isDragSelfActive;
 
-  const style = {
-    animationDelay: `${listStaggerDelayMs(index, "compact")}ms`,
-    transform: transformStyle,
-  };
+  const style = reducedMotion
+    ? undefined
+    : { animationDelay: `${listStaggerDelayMs(index, "compact")}ms` };
+
+  const cardTransition = reducedMotion
+    ? { duration: 0 }
+    : isAbsorbing
+      ? CARD_ABSORB_TWEEN
+      : isDragSelfActive
+        ? CARD_DRAG_SPRING
+        : CARD_TWEEN;
 
   const stopBubble = (event) => event.stopPropagation();
 
   return (
-    <motion.article
+    <Motion.article
       ref={setNodeRef}
       data-job-card
       style={style}
       onClick={() => onSelect?.(job.id)}
-      className={`animate-fade-in-up flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition duration-200 hover:brightness-95 ${
+      className={`${reducedMotion ? "" : "animate-fade-in-up "}flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition duration-200 hover:brightness-95 ${
         isSelected ? "border-gray-900 bg-white" : statusCardTone(job.status)
       }`}
       variants={cardVariants}
       initial="idle"
       animate={
-        isAbsorbing ? "absorbing" : isDragSelfActive ? "dragging" : "idle"
-      }
-      whileHover={isInteractionLocked ? undefined : CARD_HOVER}
-      whileTap={isInteractionLocked ? undefined : CARD_TAP}
-      transition={
         isAbsorbing
-          ? CARD_ABSORB_TWEEN
-          : isDragSelfActive
-            ? CARD_DRAG_SPRING
-            : CARD_TWEEN
+          ? "absorbing"
+          : reducedMotion
+            ? "idle"
+            : isDragSelfActive
+              ? "dragging"
+              : "idle"
       }
+      whileHover={
+        reducedMotion || isInteractionLocked ? undefined : CARD_HOVER
+      }
+      whileTap={reducedMotion || isInteractionLocked ? undefined : CARD_TAP}
+      transition={cardTransition}
       {...listeners}
       {...attributes}
     >
@@ -122,17 +136,19 @@ function CompactJobCard({
       <div className="flex shrink-0 items-center gap-2">
         {/* Keyed on job.status so the badge re-runs its entrance animation
             whenever the status changes — gives the change a visual confirm. */}
-        <motion.span
+        <Motion.span
           key={job.status}
-          initial={{ opacity: 0, scale: 0.85 }}
+          initial={
+            reducedMotion ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.85 }
+          }
           animate={{ opacity: 1, scale: 1 }}
-          transition={CARD_TWEEN}
+          transition={reducedMotion ? { duration: 0 } : CARD_TWEEN}
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusClass(
             job.status
           )}`}
         >
           {statusLabel(job.status)}
-        </motion.span>
+        </Motion.span>
 
         <span className="hidden text-[11px] tabular-nums text-text-hint sm:inline">
           {job.appliedDate
@@ -147,7 +163,7 @@ function CompactJobCard({
             rel="noreferrer"
             onPointerDown={stopBubble}
             onClick={stopBubble}
-            className="hidden h-7 w-7 items-center justify-center rounded-md text-text-hint transition hover:bg-gray-100 hover:text-blue-700 sm:inline-flex"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-md text-text-hint transition hover:bg-gray-100 hover:text-blue-700"
             aria-label="Open job link"
           >
             <ExternalLink size={13} />
@@ -163,7 +179,7 @@ function CompactJobCard({
           }}
           disabled={!canEdit}
           aria-label="Edit job"
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
+          className={`inline-flex h-11 w-11 items-center justify-center rounded-md transition ${
             canEdit
               ? "text-text-hint hover:bg-gray-100 hover:text-text-primary"
               : "cursor-not-allowed text-gray-300"
@@ -180,7 +196,7 @@ function CompactJobCard({
           }}
           disabled={!canDelete}
           aria-label="Delete job"
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
+          className={`inline-flex h-11 w-11 items-center justify-center rounded-md transition ${
             canDelete
               ? "text-text-hint hover:bg-red-50 hover:text-red-700"
               : "cursor-not-allowed text-red-200"
@@ -189,7 +205,7 @@ function CompactJobCard({
           <Trash2 size={13} />
         </button>
       </div>
-    </motion.article>
+    </Motion.article>
   );
 }
 

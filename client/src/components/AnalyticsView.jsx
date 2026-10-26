@@ -3,61 +3,19 @@ import AnalyticsEmptyState from "./AnalyticsEmptyState.jsx";
 import CountUp from "./CountUp.jsx";
 import TimeInStatusCard from "./TimeInStatusCard.jsx";
 import { useJobs } from "../context/JobContext.jsx";
+import { useDashboardAnalytics } from "../hooks/useDashboardAnalytics.js";
 import { STAGES } from "../utils/jobStages.js";
-import { aggregateJobsByWeek, getJobTotals } from "../utils/jobStats.js";
 
 /**
- * Analytics tab. Owns the three derived views (weekly bars, status donut,
- * funnel rates) since they're only consumed here. Reads `jobs` from context
- * so the only prop is the CTA to open the Add-Job dialog (which lives on
- * the page).
+ * Analytics tab. Owns funnel + pipeline tiles; weekly + status charts use
+ * `useDashboardAnalytics`. Reads `jobs` from context unless `displayJobs`
+ * is passed (useful in tests).
  */
-export default function AnalyticsView({ onAddJob }) {
-  const { jobs } = useJobs();
-  const totals = useMemo(() => getJobTotals(jobs), [jobs]);
-
-  const applicationsPerWeek = useMemo(() => {
-    const today = new Date();
-    const sixWeeksAgo = new Date(today);
-    sixWeeksAgo.setDate(today.getDate() - 5 * 7);
-
-    return aggregateJobsByWeek(jobs, { from: sixWeeksAgo, to: today }).map(
-      (row) => {
-        const monday = new Date(row.week);
-        return {
-          key: row.week,
-          label: `${monday.getMonth() + 1}/${monday.getDate()}`,
-          count: row.count,
-        };
-      }
-    );
-  }, [jobs]);
-
-  const statusBreakdown = useMemo(() => {
-    const total = (jobs || []).length;
-    const rows = STAGES.map((stage) => {
-      const count = totals[stage.key] ?? 0;
-      const percent = total > 0 ? Math.round((count / total) * 100) : 0;
-      return { ...stage, count, percent };
-    });
-
-    if (total === 0) {
-      return { rows, gradient: "conic-gradient(#e5e7eb 0deg 360deg)" };
-    }
-
-    let currentDeg = 0;
-    const segments = rows
-      .map((row) => {
-        const delta = (row.count / total) * 360;
-        const start = currentDeg;
-        const end = currentDeg + delta;
-        currentDeg = end;
-        return `${row.chartColor} ${start}deg ${end}deg`;
-      })
-      .join(", ");
-
-    return { rows, gradient: `conic-gradient(${segments})` };
-  }, [jobs, totals]);
+export default function AnalyticsView({ onAddJob, displayJobs }) {
+  const { jobs: contextJobs } = useJobs();
+  const jobs = displayJobs ?? contextJobs;
+  const { applicationsPerWeek, statusBreakdown, totals } =
+    useDashboardAnalytics(jobs);
 
   const funnelMetrics = useMemo(() => {
     const total = jobs.length || 0;
